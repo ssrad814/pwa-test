@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>PWAテスト</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --teal: #0f766e; --teal-dark: #0b5c56; --bg: #f4f7f6; --card: #ffffff;
+    --text: #1f2a2a; --muted: #5d6b6a; --ok: #15803d; --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+  header { background: var(--teal); color: #fff; padding: 20px 20px 16px; }
+  header h1 { margin: 0; font-size: 1.5rem; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: .95rem; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+  .card { background: var(--card); border-radius: 14px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { margin: 0 0 10px; font-size: 1.1rem; }
+  .status { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .count { font-size: 3.2rem; font-weight: 700; text-align: center; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+  button {
+    font: inherit; font-size: 1.1rem; border: 0; border-radius: 12px; padding: 14px 18px;
+    background: var(--teal); color: #fff; width: 100%; cursor: pointer;
+  }
+  button:active { background: var(--teal-dark); }
+  button.sub { background: #e6efee; color: var(--teal-dark); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  ul.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  ul.checks li { display: flex; gap: 10px; align-items: baseline; }
+  .mark { font-weight: 700; width: 1.4em; flex: none; text-align: center; }
+  .yes { color: var(--ok); } .no { color: var(--warn); }
+  #installBtn { display: none; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PWAテスト</h1>
+  <p>このタブレットでPWAが動くか確かめるためのアプリです</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>接続状態</h2>
+    <div class="status"><span class="dot" id="netDot"></span><span id="netText"></span></div>
+    <p class="muted" style="margin:8px 0 0">機内モードにしてもこの画面が開けば、オフライン対応は成功です。</p>
+  </section>
+
+  <section class="card">
+    <h2>タップ回数（タブレットの中に保存）</h2>
+    <div class="count" id="count">0</div>
+    <button id="tapBtn">タップしてみる</button>
+    <div class="row">
+      <button class="sub" id="exportBtn">データを書き出す</button>
+      <button class="sub" id="importBtn">データを読み込む</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <p class="muted" style="margin:10px 0 0">アプリを閉じて開き直しても数字が残っていれば、保存は成功です。</p>
+  </section>
+
+  <section class="card">
+    <h2>チェック結果</h2>
+    <ul class="checks">
+      <li><span class="mark" id="mStandalone"></span><span id="tStandalone"></span></li>
+      <li><span class="mark" id="mSw"></span><span id="tSw"></span></li>
+      <li><span class="mark" id="mStorage"></span><span id="tStorage"></span></li>
+    </ul>
+    <button id="installBtn">このアプリをインストール</button>
+    <p class="muted" id="installHint" style="margin:10px 0 0"></p>
+  </section>
+
+  <p class="muted" style="text-align:center">バージョン 1</p>
+</main>
+
+<script>
+  // ---- 保存（キー名は他のアプリとぶつからないよう接頭辞付き） ----
+  const KEY = "pwaTest.count";
+  function load() {
+    try { return parseInt(localStorage.getItem(KEY) || "0", 10) || 0; } catch (e) { return 0; }
+  }
+  function save(n) {
+    try { localStorage.setItem(KEY, String(n)); return true; } catch (e) { return false; }
+  }
+
+  let count = load();
+  const countEl = document.getElementById("count");
+  const render = () => { countEl.textContent = count; };
+  render();
+
+  document.getElementById("tapBtn").addEventListener("click", () => {
+    count++; save(count); render();
+  });
+
+  // ---- バックアップ（書き出し・読み込み） ----
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const data = { app: "pwa-test", version: 1, exportedAt: new Date().toISOString(), count };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "pwa-test-backup.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  const fileInput = document.getElementById("importFile");
+  document.getElementById("importBtn").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (data.app !== "pwa-test" || typeof data.count !== "number") throw new Error("形式が違います");
+      if (confirm("今の数字（" + count + "）を、ファイルの数字（" + data.count + "）に置き換えますか？")) {
+        count = data.count; save(count); render();
+      }
+    } catch (e) {
+      alert("読み込めませんでした：" + e.message);
+    }
+    fileInput.value = "";
+  });
+
+  // ---- 接続状態 ----
+  function updateNet() {
+    const on = navigator.onLine;
+    document.getElementById("netDot").style.background = on ? "var(--ok)" : "var(--warn)";
+    document.getElementById("netText").textContent = on ? "オンライン" : "オフライン（保存版で動いています）";
+  }
+  addEventListener("online", updateNet);
+  addEventListener("offline", updateNet);
+  updateNet();
+
+  // ---- チェック結果 ----
+  function setCheck(id, ok, yesText, noText) {
+    const m = document.getElementById("m" + id), t = document.getElementById("t" + id);
+    m.textContent = ok ? "○" : "－";
+    m.className = "mark " + (ok ? "yes" : "no");
+    t.textContent = ok ? yesText : noText;
+  }
+  const standalone = matchMedia("(display-mode: standalone)").matches;
+  setCheck("Standalone", standalone,
+    "アプリとして開いています",
+    "ブラウザで開いています（ホーム画面のアイコンから開くと○になります）");
+  setCheck("Storage", save(count), "タブレット内への保存：使えます", "タブレット内への保存：使えません");
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(() => {
+      setCheck("Sw", true, "オフライン対応：準備できました", "");
+    }).catch(() => {
+      setCheck("Sw", false, "", "オフライン対応：準備できませんでした");
+    });
+  } else {
+    setCheck("Sw", false, "", "オフライン対応：このブラウザでは使えません");
+  }
+
+  // ---- インストール ----
+  let deferred = null;
+  const installBtn = document.getElementById("installBtn");
+  const hint = document.getElementById("installHint");
+  hint.textContent = standalone ? "" :
+    "ボタンが出ない場合は、Chrome右上の「︙」→「アプリをインストール」または「ホーム画面に追加」を選んでください。";
+  addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault(); deferred = e; installBtn.style.display = "block";
+  });
+  installBtn.addEventListener("click", async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice;
+    deferred = null; installBtn.style.display = "none";
+  });
+  addEventListener("appinstalled", () => { hint.textContent = "インストールしました。ホーム画面のアイコンから開いてください。"; });
+</script>
+</body>
+</html>
